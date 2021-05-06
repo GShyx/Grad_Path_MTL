@@ -2,6 +2,7 @@
 import time
 import os
 import sys
+import torch
 
 
 class Logger(object):
@@ -22,3 +23,13 @@ class Logger(object):
 
     def flush(self):
         pass
+
+
+def save_model(save_dir, model, datasets_name, vgg_choice, epoch, use_random_mask, use_noshare_mask,
+               single_task, a, b, train_all_data):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    path = (save_dir + '/' +str(datasets_name) + '_' + str(vgg_choice) + '_' + str(epoch) + '_' +
+            str(use_random_mask) + '_' + str(use_noshare_mask) + str(single_task) + '_' +
+            str(a) + '_' + str(b) + '_' + str(train_all_data) + '.pth')
+    torch.save(model.state_dict(), path)

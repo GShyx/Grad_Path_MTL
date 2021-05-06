@@ -111,6 +111,7 @@ def similarity(grad1, grad2):
 
     return grad_similarity
 
+
 def convert_to_mask(unit_mapping_list, a, b):
     for layer_index in range(len(unit_mapping_list)):
         current_unit_mapping = unit_mapping_list[layer_index]
@@ -189,7 +190,7 @@ def pre_train(args, model, task_count, device, train_loader, optimizer, criterio
             optimizer.zero_grad()
             train_loss.backward()
 
-            #参数是任务间共同更新的
+            # 参数是任务间共同更新的
             conv_layer_num = 0
             for name, param in model.features.named_parameters():
                 if 'bias' in name:
@@ -553,6 +554,64 @@ def test_single_task(args, model, task_count, device, test_loader, optimizer, cr
               .format(i, task_result[i]['TP'], task_result[i]['TN'], task_result[i]['FP'], task_result[i]['FN']))
         print(task_result)
         print('TP:{}\tTN:{}\tFP:{}\tFN:{}'.format(TP, TN, FP, FN))
+    return total_itts
+
+
+
+def train_test_single_task(args, model, task_count, device, train_loader, test_loader, optimizer, criterion, epoch, total_itts, single_task, train_all_data=True):
+    model.train()
+    train_start = time.time()
+    batch_total = len(train_loader)
+    # correct, positives, true_positives, score_list = initialize_evaluation_vars()
+
+    epoch_loss = 0
+    individual_loss = [0 for i in range(task_count)]
+
+    for current_epoch in range(epoch):
+        x = 0
+        for enum_return in enumerate(train_loader):
+            if not train_all_data:
+                x += 1
+                if x > 2:
+                    break
+            batch_idx = enum_return[0]
+            print(batch_idx / batch_total)
+
+            data = enum_return[1][0]
+            targets = enum_return[1][1]
+            # print(data.size())
+            # print(data[0])
+            data = data.to(device)
+
+            ix = single_task
+            # print(ix)
+            target = targets[ix].to(device)
+            # print(data)
+            # print(targets[ix])
+            global active_task
+            active_task = ix
+
+            model = model.apply(change_task)
+            out = model(data)
+
+            labels = target
+
+            _, predicted = torch.max(out.data, 1)
+
+            train_loss = criterion(out, labels)
+            print('epoch:{}/{} 任务:{} loss:{}'.format(current_epoch+1, epoch, ix, train_loss))
+            # print(current_epoch, ix, train_loss)
+            optimizer.zero_grad()
+            train_loss.backward()
+            optimizer.step()
+
+        test_single_task(args, model, task_count, device, test_loader, optimizer, criterion, epoch, total_itts,
+                         single_task, train_all_data=train_all_data)
+        model.train()
+
+    train_end = time.time()
+    print("train time:", train_end - train_start, "s.")
+
     return total_itts
 
 

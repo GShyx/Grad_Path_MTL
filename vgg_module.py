@@ -5,7 +5,7 @@ import torch.utils.model_zoo as model_zoo
 from pathlayer import PathLayer
 
 __all__ = [
-    'VGG', 'vgg11', 'vgg11_bn',
+    'VGG', 'vgg11', 'vgg11_bn', 'vgg16', 'vgg16_bn'
 ]
 
 
@@ -72,7 +72,7 @@ def make_layers(cfg, task_count, unit_mapping_list, channels, batch_norm=False):
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
-            path = PathLayer(v, task_count, unit_mapping_list[index], "pathlayer"+str(ix)) # 这里将小数的参数sigma转为了整数
+            path = PathLayer(v, task_count, unit_mapping_list[index], "pathlayer"+str(ix))
             index += 1
             if batch_norm:
                 layers += [conv2d, nn.BatchNorm2d(v), path, nn.ReLU(inplace=True)]
@@ -136,7 +136,7 @@ def vgg16(pretrained=False, task_count=10, unit_mapping_list=None, channels=3, *
     return model
 
 
-def vgg166_bn(pretrained=False, task_count=10, unit_mapping_list=None, channels=3, **kwargs):
+def vgg16_bn(pretrained=False, task_count=10, unit_mapping_list=None, channels=3, **kwargs):
     """VGG 11-layer model (configuration "A") with batch normalization
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet

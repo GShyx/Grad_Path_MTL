@@ -3,11 +3,11 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import vgg_module
 import sys
-from train import create_ori_mask, pre_train, train, test, train_single_task, test_single_task, train_test
-from load_data import load_fashionMNIST, load_CIFAR
-from save_log import Logger
+from vgg_module import vgg11, vgg16
+from train import create_ori_mask, pre_train, train, test, train_single_task, test_single_task, train_test_single_task, train_test
+from load_data import load_fashionMNIST, load_CIFAR, load_CELEBA
+from save import Logger, save_model
 import os
 
 
@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description='Graduation Project - SZ170110132 MaHaixuan')
 
     parser.add_argument('--datasets', type=str, default='fashionMNIST',
-                        help='datasets: fashionMNIST or CIFAR (default: fashionMNIST)')
+                        help='datasets: fashionMNIST, CIFAR, CELEBA10 or CELEBA40 (default: fashionMNIST)')
     parser.add_argument('--vgg', type=str, default='11',
                         help='vgg version: 11 or 16 (default: 11)')
     # parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -41,6 +41,8 @@ def main():
                         help='train single task (default: False)')
     parser.add_argument('-i', action='store_true', default=False,
                         help='test in train (default: False)')
+    parser.add_argument('-m', action='store_false', default=True,
+                        help='save model (default: True)')
     parser.add_argument('--which-single-task', type=int, default=0,
                         help='if use-noshare-mask is true, which task do you want to train (default: 0)')
 
@@ -72,6 +74,7 @@ def main():
     epoch = args.epoch if train_all_data else 1
     datasets_choice = args.datasets
     vgg_choice = args.vgg
+    save_model_choice = args.m
 
     # batch_size = 64
     # a = 0.8
@@ -91,6 +94,10 @@ def main():
         train_loader, test_loader, task_count, channels, datasets_name = load_fashionMNIST(batch_size)
     elif datasets_choice == 'CIFAR':
         train_loader, test_loader, task_count, channels, datasets_name = load_CIFAR(batch_size)
+    elif datasets_choice == 'CELEBA10':
+        train_loader, test_loader, task_count, channels, datasets_name = load_CELEBA(batch_size)
+    elif datasets_choice == 'CELEBA40':
+        train_loader, test_loader, task_count, channels, datasets_name = load_CELEBA(batch_size, task_count=40)
     else:
         print('wrong datasets')
         exit(1)
@@ -117,9 +124,9 @@ def main():
         unit_mapping_list = noshare_unit_mapping_list
     else:
         if vgg_choice == '11':
-            pre_m = vgg_module.vgg11(task_count=task_count, unit_mapping_list=ones_unit_mapping_list, channels=channels)
+            pre_m = vgg11(task_count=task_count, unit_mapping_list=ones_unit_mapping_list, channels=channels)
         elif vgg_choice == '16':
-            pre_m = vgg_module.vgg16(task_count=task_count, unit_mapping_list=ones_unit_mapping_list, channels=channels)
+            pre_m = vgg16(task_count=task_count, unit_mapping_list=ones_unit_mapping_list, channels=channels)
         else:
             print('wrong vgg')
             exit(1)
@@ -133,13 +140,16 @@ def main():
         pre_criterion = nn.CrossEntropyLoss()
         unit_mapping_list = pre_train(args, pre_model, task_count, device, train_loader, pre_optimizer, pre_criterion,
                                       total_itts, zeros_unit_mapping_list, a, b, train_all_data=train_all_data)
+        if save_model_choice:
+            save_model('./pretrain_model', pre_model, datasets_name, vgg_choice, epoch, use_random_mask,
+                       use_noshare_mask, single_task, a, b, train_all_data)
     # for epoch in range(1, args.epochs + 1):
     # train(args, model, device, train_loader, optimizer, epoch)
 
     if vgg_choice == '11':
-        m = vgg_module.vgg11(task_count=task_count, unit_mapping_list=unit_mapping_list, channels=channels)
+        m = vgg11(task_count=task_count, unit_mapping_list=unit_mapping_list, channels=channels)
     elif vgg_choice == '16':
-        m = vgg_module.vgg16(task_count=task_count, unit_mapping_list=unit_mapping_list, channels=channels)
+        m = vgg16(task_count=task_count, unit_mapping_list=unit_mapping_list, channels=channels)
     else:
         print('wrong vgg')
         exit(1)
@@ -149,7 +159,10 @@ def main():
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[12, 24], gamma=0.1)
     criterion = nn.CrossEntropyLoss()
 
-    if test_in_train:
+    if test_in_train and use_noshare_mask:
+        train_test_single_task(args, model, task_count, device, train_loader, test_loader, optimizer, criterion, epoch,
+                               total_itts, single_task, train_all_data=train_all_data)
+    elif test_in_train:
         train_test(args, model, task_count, device, train_loader, test_loader, optimizer, criterion, epoch, total_itts,
                    train_all_data=train_all_data)
     elif use_noshare_mask:
@@ -162,6 +175,10 @@ def main():
               train_all_data=train_all_data)
         test(args, model, task_count, device, test_loader, optimizer, criterion, epoch, total_itts,
              train_all_data=train_all_data)
+
+    if save_model_choice:
+        save_model('./train_model', model, datasets_name, vgg_choice, epoch, use_random_mask,
+                   use_noshare_mask, single_task, a, b, train_all_data)
 
     print('datasets:{}\nvgg:{}\nepoch:{}\nuse random mask:{}\nuse noshare mask:{}\nsingle task:{}\na:{}\nb:{}'
           .format(datasets_name, vgg_choice, epoch, use_random_mask, use_noshare_mask, single_task, a, b))
